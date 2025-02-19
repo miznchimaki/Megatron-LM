@@ -10,7 +10,7 @@ import logging
 import math
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 import torch.distributed
 from .log_handler import CustomHandler
@@ -32,6 +32,12 @@ try:
     has_nvidia_modelopt = True
 except ImportError:
     has_nvidia_modelopt = False
+
+try:
+    from nvidia_resiliency_ext.inprocess import CallWrapper
+except ImportError:
+    CallWrapper = type(None)
+
 
 from megatron.core import mpu, tensor_parallel
 from megatron.core.utils import (
@@ -668,6 +674,8 @@ def pretrain(
     get_embedding_ranks=None,
     get_position_embedding_ranks=None,
     non_loss_data_func=None,
+    store=None,
+    inprocess_call_wrapper: Optional[CallWrapper] = None,
 ):
     """Main training program.
 
@@ -700,7 +708,15 @@ def pretrain(
         get_position_embedding_ranks (TODO):
         non_loss_data_func (callable): A custom function to call during evaluation.
             It can run e.g. benchmarks.
+        store: an optional instance of torch.distributed.Store, to be used by
+            torch.distributed.init_process_group
+        inprocess_call_wrapper: an optional instance of inprocess.CallWrapper,
+            it is automatically injected when in-process restart is in use
     """
+
+    if inprocess_call_wrapper is not None:
+        iteration = inprocess_call_wrapper.iteration
+        store = torch.distributed.PrefixStore(str(iteration), store)
 
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(
@@ -708,6 +724,7 @@ def pretrain(
         args_defaults=args_defaults,
         get_embedding_ranks=get_embedding_ranks,
         get_position_embedding_ranks=get_position_embedding_ranks,
+        store=store,
     )
 
     args = get_args()
