@@ -14,6 +14,7 @@ import warnings
 import torch
 
 from megatron.core import rerun_state_machine
+from megatron.training import get_args
 
 from . import arguments
 
@@ -137,7 +138,7 @@ def maybe_wrap_for_inprocess_restart(pretrain):
 
 def maybe_force_nccl_backend_init(device_id):
 
-    args = arguments.parse_args()
+    args = get_args()
 
     # Inprocess uses destroy_process_group to terminate NCCL backend, which
     # does not terminate NCCL kernels if NCCL backend wasn't fully initialized
