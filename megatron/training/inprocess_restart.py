@@ -73,14 +73,26 @@ def inprocess_restart(train):
             )
         )
 
+    initialize = inprocess.Compose(
+        inprocess.initialize.RetryController(min_world_size=args.inprocess_active_world_size),
+        inprocess.nested_restarter.NestedRestarterHandlingCompleted(),
+    )
+    abort = inprocess.Compose(
+        inprocess.abort.AbortTorchDistributed(),
+        inprocess.nested_restarter.NestedRestarterHandlingStarting(),
+    )
+    completion = inprocess.nested_restarter.NestedRestarterFinalized()
+    terminate = inprocess.nested_restarter.NestedRestarterAborted()
+
     train = inprocess.Wrapper(
         store_kwargs={
             'timeout': timedelta(seconds=300),
             'port': int(os.environ['MASTER_PORT']) + 2,
         },
-        initialize=inprocess.initialize.RetryController(
-            min_world_size=args.inprocess_active_world_size
-        ),
+        initialize=initialize,
+        abort=abort,
+        completion=completion,
+        terminate=terminate,
         health_check=inprocess.health_check.CudaHealthCheck(timeout=timedelta(seconds=10)),
         rank_assignment=inprocess.rank_assignment.Tree(layers=layers),
         finalize=inprocess.Compose(*finalize),
