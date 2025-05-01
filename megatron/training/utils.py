@@ -361,7 +361,9 @@ def print_rank_0(message):
         if torch.distributed.get_rank() == 0:
             print(message, flush=True)
     else:
-        print(message, flush=True)
+        args = get_args()
+        if args.rank == 0:
+            print(message, flush=True)
 
 
 def is_rank0():
