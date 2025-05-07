@@ -78,9 +78,9 @@ def inprocess_restart(train):
         inprocess.nested_restarter.NestedRestarterHandlingCompleted(),
     )
     abort = inprocess.Compose(
-        inprocess.nested_restarter.NestedRestarterHandlingStarting(),
-        inprocess.abort.AbortTorchDistributed(),
         inprocess.abort.AbortTransformerEngine(),
+        inprocess.abort.AbortTorchDistributed(),
+        inprocess.nested_restarter.NestedRestarterHandlingStarting(),
     )
     completion = inprocess.nested_restarter.NestedRestarterFinalized()
     terminate = inprocess.nested_restarter.NestedRestarterAborted()
