@@ -361,8 +361,13 @@ def print_rank_0(message):
         if torch.distributed.get_rank() == 0:
             print(message, flush=True)
     else:
-        args = get_args()
-        if args.rank == 0:
+        try:
+            # Attempt to print message only on rank 0 using args.
+            args = get_args()
+            if args.rank == 0:
+                print(message, flush=True)
+        except AssertionError:
+            # Fall through if args is not populated yet.
             print(message, flush=True)
 
 
