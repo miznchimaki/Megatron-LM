@@ -139,10 +139,14 @@ def destroy_global_state():
     destroy_rerun_state_machine()
 
 
-def print_datetime(string):
-    """Note that this call will sync across all ranks."""
+def print_datetime(string, override_timestamp=None):
+    """Note that this call will sync across all ranks. Use override_timestamp if provided;
+       otherwise use current timestamp."""
     torch.distributed.barrier()
-    time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if override_timestamp is None:
+        time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+    else:
+        time_str = datetime.fromtimestamp(override_timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')
     print_rank_0(f'[{string}] datetime: {time_str} ')
 
 
@@ -207,7 +211,7 @@ def num_floating_point_operations(args, batch_size):
                      num_attn_layers, num_mamba_layers, num_mlp_layers,
                      mamba_state_dim=128, mamba_head_dim=64,
                      mamba_num_groups=8, mamba_num_heads=128,
-                     num_attn_heads=32,gqa=True, 
+                     num_attn_heads=32,gqa=True,
                      gqa_groups=8, kv_channels=None,
                      mlp_expansion=4.0, swiglu=False,
                      vocab_size=256000):
@@ -664,6 +668,7 @@ def cuda_graph_set_manual_hooks(model):
             layer.setup_manual_hooks(model_chunk._make_forward_pre_hook)
 
 
+
 def pretrain(
     train_valid_test_dataset_provider,
     model_provider,
@@ -677,6 +682,7 @@ def pretrain(
     non_loss_data_func=None,
     store=None,
     inprocess_call_wrapper: Optional[CallWrapper] = None,
+    timestamp_before_pretrain=None,
 ):
     """Main training program.
 
@@ -715,9 +721,13 @@ def pretrain(
             it is automatically injected when in-process restart is in use
     """
 
+    timestamp_after_pretrain = time.time()
+
     if inprocess_call_wrapper is not None:
         iteration = inprocess_call_wrapper.iteration
         store = torch.distributed.PrefixStore(str(iteration), store)
+
+    timestamp_after_inprocess_setup = time.time()
 
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(
@@ -728,6 +738,13 @@ def pretrain(
         store=store,
     )
 
+    # Note, not entirely accurate as rank 0 might not be the first or last to hit these timestamps
+    print_datetime('before entering pretrain', timestamp_before_pretrain)
+    print_datetime('after in-process setup and before initialize_megatron', timestamp_after_inprocess_setup)
+    print_datetime('after entering pretrain and before initialize_megatron', timestamp_after_pretrain)
+
+    print_datetime("after initialize_megatron")
+
     args = get_args()
     timers = get_timers()
 
@@ -736,10 +753,13 @@ def pretrain(
 
     # Initialize fault tolerance
     # NOTE: ft_integration functions other than `setup` are no-op if the FT is not initialized
+    print_datetime('before in-job setup')
     if args.enable_ft_package:
         ft_integration.setup(args)
         ft_integration.maybe_setup_simulated_fault()
+    print_datetime('after in-job setup')
 
+    print_datetime('before remaining megatron initialization')
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
 
@@ -764,6 +784,7 @@ def pretrain(
     print_rank_0(
         'time to initialize megatron (seconds): {:.3f}'.format(time.time() - _TRAIN_START_TIME)
     )
+    print_datetime('after remaining megatron initialization')
     print_datetime('after megatron is initialized')
     app_metrics['app_model_init_finish_time'] = one_logger_utils.get_timestamp_in_ms()
 
@@ -812,7 +833,7 @@ def pretrain(
     )
 
     timers('model-and-optimizer-setup').stop()
-    print_datetime('after model, optimizer, and learning rate ' 'scheduler are built')
+    print_datetime('after model, optimizer, and learning rate scheduler are built')
     app_metrics['app_build_optimizer_finish_time'] = one_logger_utils.get_timestamp_in_ms()
     config = get_model_config(model[0])
 

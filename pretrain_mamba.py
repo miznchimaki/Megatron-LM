@@ -5,6 +5,7 @@ import os
 import torch
 from functools import partial
 from typing import List, Optional, Tuple, Union
+import time
 
 from megatron.training import get_args
 from megatron.training import inprocess_restart
@@ -268,15 +269,19 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 if __name__ == "__main__":
 
+
     # Temporary for transition to core datasets
     train_valid_test_datasets_provider.is_distributed = True
 
     # Optionally enable inprocess restart on pretrain
     pretrain, store = inprocess_restart.maybe_wrap_for_inprocess_restart(pretrain)
 
+    timestamp_before_pretrain = time.time()
+
     pretrain(train_valid_test_datasets_provider,
              model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
-             store=store)
+             store=store,
+             timestamp_before_pretrain=timestamp_before_pretrain)
