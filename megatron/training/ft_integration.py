@@ -81,6 +81,12 @@ def setup(args: argparse.Namespace) -> None:
     Raises:
         ValueError: if invalid config is provided
     """
+
+    # Early return if already initialized, without generating any error
+    if get_rank_monitor_client() is not None:
+        print_rank_0(f"FT: already initialized")
+        return
+
     from nvidia_resiliency_ext.fault_tolerance import RankMonitorClient
 
     print_rank_0(f"FT: initializing...")
