@@ -17,7 +17,12 @@ import psutil
 import torch
 from torch import multiprocessing as mp
 from torch.distributed.checkpoint import FileSystemWriter
-from torch.distributed.checkpoint.filesystem import DEFAULT_SUFFIX, _StoragePrefix, _write_item, SerializationFormat
+from torch.distributed.checkpoint.filesystem import (
+    DEFAULT_SUFFIX,
+    SerializationFormat,
+    _StoragePrefix,
+    _write_item,
+)
 from torch.distributed.checkpoint.planner import SavePlan, SavePlanner, WriteItem, WriteItemType
 from torch.distributed.checkpoint.storage import WriteResult
 from torch.futures import Future
@@ -319,8 +324,13 @@ class FileSystemWriterAsync(FileSystemWriter):
                     # _write_item with ToT PyTorch requires `serialization_format` arg.
                     local_results.append(
                         _write_item(
-                            *transform_list, stream, data, write_item, storage_key,
-                            SerializationFormat.TORCH_SAVE)
+                            *transform_list,
+                            stream,
+                            data,
+                            write_item,
+                            storage_key,
+                            SerializationFormat.TORCH_SAVE,
+                        )
                     )
 
                 for write_item, tensor in tensor_data:
@@ -328,8 +338,13 @@ class FileSystemWriterAsync(FileSystemWriter):
                     # _write_item with ToT PyTorch requires `serialization_format` arg.
                     local_results.append(
                         _write_item(
-                            *transform_list, stream, tensor, write_item, storage_key,
-                            SerializationFormat.TORCH_SAVE)
+                            *transform_list,
+                            stream,
+                            tensor,
+                            write_item,
+                            storage_key,
+                            SerializationFormat.TORCH_SAVE,
+                        )
                     )
 
                 if use_fsync:
