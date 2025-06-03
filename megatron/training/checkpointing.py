@@ -523,6 +523,10 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler, num_floati
                                            barrier=False)
         else:
             def iter_finalize_fn():
+                prev_iteration = 0
+                if os.path.exists(tracker_filename):
+                    with open(tracker_filename, 'r') as f:
+                        prev_iteration = int(f.read().strip())
                 with open(tracker_filename, 'w') as f:
                     f.write(str(iteration))
                 print_rank_0(f'  successfully saved checkpoint from iteration {int(iteration):7d} to {args.save} '
@@ -531,6 +535,21 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler, num_floati
                 if args.log_progress and args.async_save:
                     append_to_progress_log(f'Saved async checkpoint\tIteration: {iteration}',
                                            barrier=False)
+                if args.save_retain_interval is not None:
+                    if prev_iteration > 0 and prev_iteration != iteration and prev_iteration % args.save_retain_interval != 0:
+                        checkpoint_name = get_checkpoint_name(args.save, iteration=prev_iteration,
+                                                              return_base_dir=True)
+                        # Don't delete if `checkpoint_name` is a symbolic link.
+                        if os.path.islink(checkpoint_name):
+                            print_rank_0('  skipping deleting checkpoint from iteration {:7d} at {} since it is a symbolic link'
+                                         .format(prev_iteration, args.save))
+                        else:
+                            shutil.rmtree(checkpoint_name)
+                            print_rank_0('  successfully deleted checkpoint from iteration {:7d} at {}'
+                                         .format(prev_iteration, args.save))
+                            if args.log_progress:
+                                append_to_progress_log(f'Deleted checkpoint\tIteration: {prev_iteration}',
+                                                       barrier=False)
 
         if args.async_save:
             assert async_save_request is not None
