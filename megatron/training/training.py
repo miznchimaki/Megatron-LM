@@ -2248,7 +2248,7 @@ def train(
         update_num_microbatches(args.consumed_train_samples, consistency_check=True, verbose=True)
 
         # Completely skip iteration if needed.
-        if iteration in args.iterations_to_skip:
+        if (iteration + 1) in args.iterations_to_skip:  # Iteration hasn't been incremented yet.
             # Dummy train_step to fast forward train_data_iterator.
             dummy_train_step(train_data_iterator)
             iteration += 1
