@@ -14,6 +14,7 @@ from torch import Tensor
 from megatron.core.dist_checkpointing.mapping import ShardedStateDict
 from megatron.core.dist_checkpointing.utils import apply_prefix_mapping
 from megatron.core.inference.contexts import BaseInferenceContext
+from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.transformer.cuda_graphs import CudaGraphManager
 from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.module import MegatronModule

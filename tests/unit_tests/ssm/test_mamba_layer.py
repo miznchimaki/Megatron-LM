@@ -4,12 +4,14 @@ import pytest
 import torch
 
 from megatron.core.models.mamba.mamba_layer_specs import mamba_stack_spec
+from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.ssm.mamba_layer import MambaLayer
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.transformer import TransformerConfig
 from tests.unit_tests.test_utilities import Utils
 
 
+@pytest.mark.internal
 class TestMambaLayer:
 
     def setup_method(self, method):
