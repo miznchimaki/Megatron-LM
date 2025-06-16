@@ -51,6 +51,12 @@ def add_text_generate_args(parser):
         help='Return the log probabilities of the final output tokens',
     )
     group.add_argument(
+        "--top-n-logprobs",
+        type=int,
+        default=0,
+        help="Top-N logprobs"
+    )
+    group.add_argument(
         "--num-tokens-to-generate",
         type=int,
         default=30,
@@ -66,13 +72,6 @@ def add_text_generate_args(parser):
     )
     group.add_argument(
         "--num-input-tokens", type=int, default=None, help='Number of input tokens per prompt'
-    )
-    group.add_argument(
-        "--max-batch-size",
-        type=int,
-        default=8,
-        dest="inference_max_requests",
-        help='Max number of prompts to process at once',
     )
     group.add_argument("--stream", action="store_true", default=False, help="Stream output tokens")
     group.add_argument(
@@ -101,7 +100,7 @@ def get_inference_engine(args: argparse.Namespace, model: MegatronModule) -> Abs
         fp32_residual_connection=args.fp32_residual_connection,
         params_dtype=args.params_dtype,
         padded_vocab_size=args.padded_vocab_size,
-        inference_max_requests=args.inference_max_requests,
+        inference_max_requests=args.inference_max_batch_size,
         inference_max_seq_length=args.inference_max_seq_length,
     )
 
@@ -215,6 +214,7 @@ def main():
         top_k=args.top_k,
         top_p=args.top_p,
         return_log_probs=args.return_log_probs,
+        top_n_logprobs=args.top_n_logprobs,
         num_tokens_to_generate=args.num_tokens_to_generate,
     )
 
@@ -222,6 +222,7 @@ def main():
     if args.num_input_tokens is not None:
         requests = []
         batch_size = args.inference_max_requests
+        assert args.prompts is None
         for i in range(batch_size):
             prompt_tokens = get_random_prompt_tokens(tokenizer, args.num_input_tokens)
             requests.append(
