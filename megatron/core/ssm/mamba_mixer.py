@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from megatron.core.dist_checkpointing import ShardedTensor
 from megatron.core.dist_checkpointing.mapping import ReplicaId, ShardedTensorFactory
 from megatron.core.inference.contexts import BaseInferenceContext
-from megatron.core.parallel_state import get_tensor_model_parallel_world_size
+from megatron.core.parallel_state import get_tensor_model_parallel_world_size, get_context_parallel_group
 from megatron.core.tensor_parallel import get_cuda_rng_tracker
 from megatron.core.transformer import TransformerConfig
 from megatron.core.transformer.module import MegatronModule
@@ -202,21 +202,27 @@ class MambaMixer(MegatronModule):
                 "input projection output tensor must be a multiple of 16."
             )
 
-        self.tensor_model_parallel_size = get_tensor_model_parallel_world_size()
-        assert self.d_inner % self.tensor_model_parallel_size == 0
-        assert self.ngroups % self.tensor_model_parallel_size == 0
-        assert self.nheads % self.tensor_model_parallel_size == 0
+        tp_size = get_tensor_model_parallel_world_size()
+
+        # Ensure that each TP rank gets at least one head:
+        assert self.nheads % tp_size == 0, "nheads must be evenly divisble by tp_size"
+        self.nheads_local_tp = self.nheads // tp_size
+
+        # Note that we do not need to confirm that `d_inner % tp_size == 0` because
+        # `d_inner % headdim == 0`, `nheads = d_inner // headdim`, and `nheads % tp_size == 0`
+        self.d_inner_local_tp = self.d_inner // tp_size
+
+        # Ensure that each TP rank gets at least one group:
+        assert self.ngroups % tp_size == 0, "ngroups must be evenly divisible by tp_size"
+        self.ngroups_local_tp = self.ngroups // tp_size
+
+        # Ensure that each group has a positive integer number of heads:
+        assert self.nheads % self.ngroups == 0, "nheads must be evenly divisible by ngroups"
+
         assert not bias
         assert not self.norm_before_gate
 
-        self.d_inner_local = self.d_inner // self.tensor_model_parallel_size
-        self.ngroups_local = self.ngroups // self.tensor_model_parallel_size
-        self.nheads_local = self.nheads // self.tensor_model_parallel_size
-
-        assert self.d_inner_local % self.ngroups_local == 0
-
-        # Assume sequence parallelism: input is already partitioned along the
-        # sequence dimension
+        # Assume sequence parallelism: input is already partitioned along the sequence dimension
         self.in_proj = build_module(
             submodules.in_proj,
             self.d_model,
@@ -278,13 +284,6 @@ class MambaMixer(MegatronModule):
             # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
             self.dt_bias = nn.Parameter(inv_dt)
-            # Our initialization would set all Linear.bias to zero,
-            # need to mark this one as _no_reinit
-            self.dt_bias._no_reinit = True
-            # Just to be explicit. Without this we already don't
-            # put wd on dt_bias because of the check
-            # name.endswith("bias") in param_grouping.py
-            self.dt_bias._no_weight_decay = True
             setattr(self.dt_bias, 'tensor_model_parallel', True)
 
             # A parameter
@@ -332,13 +331,15 @@ class MambaMixer(MegatronModule):
             tp_comm_buffer_name='fc2',
         )
 
+        assert get_context_parallel_group() is not None, "context_parallel_group must be defined"
+
         # Regarding `conv1d`.{`weight`, `bias`}, `dt_bias`, `A_log`, and `D`: these are the
         # trainable variables for the current tensor parallel rank, with each tensor parallel rank
         # having indepdendent trainable variables. All context parallel ranks in a tensor parallel
         # rank store the same trainable variables, but only use and update their unique/independent
         # slice of them.
         self.cp = MambaContextParallel(
-            cp_group=self.model_comm_pgs.cp,
+            cp_group=get_context_parallel_group(),
             d_inner_local_tp=self.d_inner_local_tp,
             nheads_local_tp=self.nheads_local_tp,
             ngroups_local_tp=self.ngroups_local_tp,
