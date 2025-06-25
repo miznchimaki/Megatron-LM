@@ -290,3 +290,6 @@ def destroy_global_vars():
 
     global _GLOBAL_SIGNAL_HANDLER
     _GLOBAL_SIGNAL_HANDLER = None
+
+    global _GLOBAL_ENERGY_MONITOR
+    _GLOBAL_ENERGY_MONITOR = None
