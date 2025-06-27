@@ -146,7 +146,7 @@ def validate_model_config_args_from_heterogeneous_config(args):
     )
 
     n_kv_heads_in_group = [
-        config["attention"]["n_heads_in_group"] for config in hf_config_dict.block_configs 
+        config["attention"]["n_heads_in_group"] for config in hf_config_dict.block_configs
         if config["attention"]["n_heads_in_group"] is not None
     ]
     assert all(num == n_kv_heads_in_group[0] for num in n_kv_heads_in_group), "num query head must be consistent across all layers"
@@ -296,7 +296,7 @@ def validate_args(args, defaults={}):
                 LocalCheckpointManager
         except ModuleNotFoundError as e:
             raise RuntimeError('nvidia_resiliency_ext is required for local checkpointing') from e
-        
+
     # validate model config args from heterogeneous config (if provided).
     validate_model_config_args_from_heterogeneous_config(args)
 
@@ -1022,7 +1022,7 @@ def core_transformer_config_from_args(args, config_class=None):
 
     if args.multi_latent_attention:
         config_class = MLATransformerConfig
-    
+
     if args.heterogeneous_layers_config_path is not None:
         assert not args.multi_latent_attention, "Multi latent attention with heterogeneous layers is not supported."
         config_class = HeterogeneousTransformerConfig
@@ -1387,6 +1387,13 @@ def _add_inprocess_restart_args(parser):
                        'updates.')
     group.add_argument('--inprocess-heartbeat-interval', default=30, type=float,
                        help='Monitoring interval (in seconds) for detecting unresponsive ranks.')
+    group.add_argument('--inprocess-monitor-process-logdir', default=None, type=str,
+                       help='Directory for monitor process logs.')
+
+    group.add_argument('--inprocess-initial-delay', default=0, type=float,
+                       help='Initial delay (in seconds) before starting progress monitoring on first startup.')
+    group.add_argument('--inprocess-restart-delay', default=0, type=float,
+                       help='Initial delay (in seconds) before starting progress monitoring on restarts.')
 
     group.add_argument('--inprocess-soft-timeout', default=60, type=float,
                        help='Soft progress timeout (in seconds).')
@@ -1417,6 +1424,8 @@ def _add_inprocess_restart_args(parser):
                        'as warm reserve.')
     group.add_argument('--inprocess-empty-cuda-cache', action='store_true',
                        help='Release all unoccupied cached GPU memory on every in-process restart.')
+    group.add_argument('--inprocess-max-rank-faults', default=None, type=int,
+                       help='Maximum number of faults cause by the process')
     return parser
 
 def _add_one_logger_args(parser):
@@ -2671,9 +2680,9 @@ def _add_mla_args(parser):
 
 def _add_heterogeneous_args(parser):
     """
-    Heterogeneous models refer to transformer architectures where individual layers can differ 
+    Heterogeneous models refer to transformer architectures where individual layers can differ
     in configuration. Specifically:
-        - Attention or MLP layers can be replaced with either a linear layer or a no-op 
+        - Attention or MLP layers can be replaced with either a linear layer or a no-op
         - MLP intermediate dimensions can vary between layers
     We use the format of the HuggingFace config files in llama nemotron models to define the architecture.
     For example, https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1/resolve/main/config.json

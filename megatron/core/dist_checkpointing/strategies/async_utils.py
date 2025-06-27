@@ -26,11 +26,11 @@ def _disable_gc():
     """Temporarily disables GC."""
     gc_enabled = gc.isenabled()
     try:
-        if gc_enabled:
+        if gc_enabled and mp.get_start_method() != 'spawn':
             gc.disable()
         yield
     finally:
-        if gc_enabled:
+        if gc_enabled and mp.get_start_method() != 'spawn':
             gc.enable()
 
 
@@ -150,7 +150,7 @@ class AsyncCaller(ABC):
         return ten[0] == 0
 
     @abstractmethod
-    def close(self):
+    def close(self, abort=False):
         """Terminate the async caller at exit of an application or some termination conditions"""
         logger.info(f"AsyncCaller: {torch.distributed.get_rank()}, Destroying Async Caller")
 
@@ -238,7 +238,7 @@ class TemporalAsyncCaller(AsyncCaller):
             is_done = True
         return is_done
 
-    def close(self):
+    def close(self, abort=False):
         """For TemporalAsyncCaller, this method is called explictly in `is_current_async_calls_done`
 
         This method make sure the TemporalAsyncCaller terminated
@@ -246,7 +246,10 @@ class TemporalAsyncCaller(AsyncCaller):
         """
         if self.process:
             logger.debug(f"rank: {self.rank}, joining self.process")
-            self.process.join()
+            if abort:
+                self.process.kill()
+            else:
+                self.process.join()
             self.process = None
             logger.debug(
                 "TemporalAsyncCaller: Async process join finished "
@@ -391,7 +394,7 @@ class PersistentAsyncCaller(AsyncCaller):
 
         return is_done
 
-    def close(self):
+    def close(self, abort=False):
         """Wait on the left async requests and terminate the PersistentAsyncCaller
 
         Signals the PersistentAsyncCaller by sending a 'DONE' message to make it terminated
@@ -400,16 +403,18 @@ class PersistentAsyncCaller(AsyncCaller):
             f"PersistentAsyncCaller: {torch.distributed.get_rank()}, Destroying Async Caller"
         )
         if self.process:
-            self.queue.put('DONE')
-            self.queue.join()
-            self.process.join()
+            if abort:
+                self.process.kill()
+            else:
+                self.queue.put('DONE')
+                self.queue.join()
+                self.process.join()
             self.process = None
 
     def __del__(self):
         self.close()
 
     @staticmethod
-    @_disable_gc()
     def async_loop(
         rank: int,
         queue: mp.JoinableQueue,
@@ -454,13 +459,18 @@ class PersistentAsyncCaller(AsyncCaller):
                     call_idx = preload_q.get()
                     # the 2nd arg is state dict
                     async_fn_args[1] = item.preload_fn()
+                    gc.collect()
                     logger.debug(f"{rank} has completed D2H of {call_idx}")
                     preload_q.task_done()
                 item.async_fn(*async_fn_args, **item.async_fn_kwargs)
                 logger.debug(f"{rank} has completed saving {item.call_idx}")
                 comp_q.put(item.call_idx)
                 queue.task_done()
+                del async_fn_args
+            del item
+            gc.collect()
 
+        torch.cuda.empty_cache()
         logger.info(f"PersistentAsyncCaller: persistent ckpt worker for {rank}  has terminated")
 
 
@@ -574,8 +584,9 @@ class AsyncCallsQueue:
         """Get the number of active async calls."""
         return len(self.async_calls)
 
-    def close(self):
+    def close(self, abort=False):
         """Finalize all calls upon closing."""
-        self.maybe_finalize_async_calls(blocking=True)
+        if not abort:
+            self.maybe_finalize_async_calls(blocking=True)
         if self.persistent and self.persistent_caller:
-            self.persistent_caller.close()
+            self.persistent_caller.close(abort=abort)

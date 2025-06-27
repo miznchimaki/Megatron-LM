@@ -16,7 +16,9 @@ import torch
 
 from megatron.core import rerun_state_machine
 from megatron.training import get_args
-from megatron.training.async_utils import maybe_finalize_async_save
+from megatron.training.async_utils import (
+    reset_persistent_async_worker,  # , maybe_finalize_async_save
+)
 
 from . import arguments
 
@@ -26,6 +28,12 @@ def destroy_state():
 
     training.destroy_global_state()
     rerun_state_machine.destroy_rerun_state_machine()
+
+
+class AbortCheckpoint(inprocess.abort.Abort):
+    def __call__(self, state: inprocess.state.FrozenState) -> inprocess.state.FrozenState:
+        reset_persistent_async_worker()
+        return state
 
 
 def inprocess_restart(train):
@@ -68,9 +76,6 @@ def inprocess_restart(train):
 
     finalize = [
         inprocess.finalize.ThreadedFinalize(timeout=timedelta(seconds=10), fn=destroy_state),
-        inprocess.finalize.ThreadedFinalize(
-            timeout=timedelta(seconds=10), fn=partial(maybe_finalize_async_save, blocking=True, no_dist=True, cleanup=True)
-        ),
     ]
 
     if args.inprocess_empty_cuda_cache:
@@ -84,13 +89,34 @@ def inprocess_restart(train):
         inprocess.initialize.RetryController(min_world_size=args.inprocess_active_world_size),
         inprocess.nested_restarter.NestedRestarterHandlingCompleted(),
     )
+
     abort = inprocess.Compose(
         inprocess.abort.AbortTransformerEngine(),
         inprocess.abort.AbortTorchDistributed(),
+        AbortCheckpoint(),
         inprocess.nested_restarter.NestedRestarterHandlingStarting(),
     )
     completion = inprocess.nested_restarter.NestedRestarterFinalized()
     terminate = inprocess.nested_restarter.NestedRestarterAborted()
+
+    health_check = inprocess.Compose(
+        inprocess.health_check.CudaHealthCheck(timeout=timedelta(seconds=10)),
+        inprocess.health_check.FaultCounter(max_rank_faults=args.inprocess_max_rank_faults),
+    )
+
+    slurm_local_id = os.environ.get("SLURM_LOCALID")
+    slurm_global_rank = os.environ.get("SLURM_PROCID")
+    slurm_job_id = os.environ.get("SLURM_JOB_ID")
+    hostname = socket.gethostname()
+
+    if int(slurm_global_rank) == 0:
+        assert args.inprocess_monitor_process_logdir is not None
+        monitor_process_logfile = os.path.join(
+            args.inprocess_monitor_process_logdir,
+            f"monitor_{slurm_job_id}_{hostname}_{slurm_global_rank}_{slurm_local_id}.log"
+        )
+    else:
+        monitor_process_logfile = None
 
     train = inprocess.Wrapper(
         store_kwargs={
@@ -101,7 +127,7 @@ def inprocess_restart(train):
         abort=abort,
         completion=completion,
         terminate=terminate,
-        health_check=inprocess.health_check.CudaHealthCheck(timeout=timedelta(seconds=10)),
+        health_check=health_check,
         rank_assignment=inprocess.rank_assignment.Tree(layers=layers),
         finalize=inprocess.Compose(*finalize),
         heartbeat_interval=timedelta(seconds=args.inprocess_heartbeat_interval),
@@ -115,6 +141,9 @@ def inprocess_restart(train):
         hard_timeout=timedelta(seconds=args.inprocess_hard_timeout),
         termination_grace_time=timedelta(seconds=args.inprocess_termination_grace_time),
         enabled=True,
+        monitor_process_logfile=monitor_process_logfile,
+        initial_delay=timedelta(seconds=args.inprocess_initial_delay),
+        restart_delay=timedelta(seconds=args.inprocess_restart_delay),
     )(train)
 
     return train

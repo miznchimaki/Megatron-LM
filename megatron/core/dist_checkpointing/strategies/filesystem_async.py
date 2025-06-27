@@ -179,7 +179,7 @@ class FileSystemWriterAsync(FileSystemWriter):
         transform_list = [self.transforms] if hasattr(self, 'transforms') else []
         return (
             partial(self.write_preloaded_data_multiproc, transform_list),
-            partial(self.preload_tensors, self.write_buckets, True),
+            partial(self.preload_tensors, self.write_buckets, False),
             [torch.distributed.get_rank(), self.write_buckets, self.results_queue],
         )
 
@@ -195,10 +195,13 @@ class FileSystemWriterAsync(FileSystemWriter):
 
         for bucket in write_buckets:
             file_name, storage_key, (bytes_data, tensor_data) = bucket
-            tensor_data = [
-                (item, tensor.to("cpu", non_blocking=non_blocking)) for item, tensor in tensor_data
-            ]
-            result.append((file_name, storage_key, (bytes_data, tensor_data)))
+            staged_tensor_data = []
+            for item, tensor in tensor_data:
+                staged_tensor_data.append((item, tensor.to("cpu", non_blocking=non_blocking)))
+                del tensor
+            del tensor_data
+            result.append((file_name, storage_key, (bytes_data, staged_tensor_data)))
+        del write_buckets
         if non_blocking:
             torch.cuda.synchronize()
         return result
