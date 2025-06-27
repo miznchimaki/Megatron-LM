@@ -744,6 +744,10 @@ def pretrain(
     print_datetime('after entering pretrain and before initialize_megatron', timestamp_after_pretrain)
 
     print_datetime("after initialize_megatron")
+    if torch.distributed.get_rank() % 8 == 0:
+        min_rank = torch.distributed.get_rank()
+        max_rank = min_rank + 7
+        print(f"Ranks {min_rank} to {max_rank} on physical node {os.uname()[1]}")
 
     args = get_args()
     timers = get_timers()
