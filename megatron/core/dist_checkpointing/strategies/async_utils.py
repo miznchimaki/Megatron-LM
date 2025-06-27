@@ -167,6 +167,7 @@ class TemporalAsyncCaller(AsyncCaller):
     def __init__(self):
         self.process: Optional[mp.Process] = None
         self.start_time: Optional[float] = None
+        self.rank: int = -1 # rank of the trainer where the temporal async caller is created.
 
     @_disable_gc()
     def schedule_async_call(self, async_req: AsyncRequest) -> None:
@@ -190,11 +191,11 @@ class TemporalAsyncCaller(AsyncCaller):
             # stage GPU tensors to its defined destination
             async_fn_args[1] = async_req.preload_fn()
 
-        rank = torch.distributed.get_rank()
+        self.rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else -1
         start_sync = time()
         torch.cuda.synchronize()
         end_sync = time()
-        logger.debug(f"rank: {rank}, takes {end_sync - start_sync} to finish D2H ")
+        logger.debug(f"rank: {self.rank}, takes {end_sync - start_sync} to finish D2H ")
 
         ctx = mp.get_context('fork')
         self.start_time = time()
@@ -203,7 +204,7 @@ class TemporalAsyncCaller(AsyncCaller):
         )
         self.process.start()
         init_time = time()
-        logger.debug(f"rank: {rank}, takes {init_time - self.start_time} to schedule async ckpt ")
+        logger.debug(f"rank: {self.rank}, takes {init_time - self.start_time} to schedule async ckpt ")
 
     def is_current_async_call_done(self, blocking: bool = False, no_dist: bool = False) -> bool:
         """Check if async save is finished on all ranks.
@@ -244,7 +245,7 @@ class TemporalAsyncCaller(AsyncCaller):
         with all its assigned async request completed
         """
         if self.process:
-            logger.debug(f"rank: {torch.distributed.get_rank()}, joining self.process")
+            logger.debug(f"rank: {self.rank}, joining self.process")
             self.process.join()
             self.process = None
             logger.debug(
@@ -276,6 +277,7 @@ class PersistentAsyncCaller(AsyncCaller):
         self.comp_q: mp.Queue = ctx.Queue()
         self.cur_item: int = None
         self.cur_idx: int = -1
+        self.rank: int = -1 # rank of the trainer where the persistent worker is created.
 
     def schedule_async_call(self, async_req: AsyncRequest) -> None:
         """Put `AsyncRequest` to the Persistent Async Caller
@@ -296,8 +298,9 @@ class PersistentAsyncCaller(AsyncCaller):
         self.start_time = time()
         if self.process is None:
             ctx = mp.get_context('spawn')
+            self.rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else -1
             logger.info(
-                f"PersistentAsyncCaller: {torch.distributed.get_rank()}, Starting Async Caller"
+                f"PersistentAsyncCaller: {self.rank}, Starting Async Caller"
             )
             self.process: mp.Process = ctx.Process(
                 target=PersistentAsyncCaller.async_loop,
@@ -311,13 +314,13 @@ class PersistentAsyncCaller(AsyncCaller):
             )
             self.process.start()
             logger.info(
-                f"PersistentAsyncCaller: {torch.distributed.get_rank()}, Started Async Caller"
+                f"PersistentAsyncCaller: {self.rank}, Started Async Caller"
             )
 
         if async_req.preload_fn:
             self.preload_q.put(async_req.call_idx)
         self.queue.put(async_req)
-        logger.debug(f"rank: {torch.distributed.get_rank()}, put {async_req.call_idx}")
+        logger.debug(f"rank: {self.rank}, put {async_req.call_idx}")
 
         if async_req.preload_fn:
             start_sync = time()
@@ -325,13 +328,13 @@ class PersistentAsyncCaller(AsyncCaller):
             self.preload_q.join()
             end_sync = time()
             logger.debug(
-                f"rank: {torch.distributed.get_rank()}, "
+                f"rank: {self.rank}, "
                 f"takes {end_sync - start_sync} to finish D2H "
             )
 
         init_time = time()
         logger.debug(
-            f"rank: {torch.distributed.get_rank()}, takes {init_time - self.start_time} "
+            f"rank: {self.rank}, takes {init_time - self.start_time} "
             "to schedule async ckpt "
         )
 
@@ -371,7 +374,7 @@ class PersistentAsyncCaller(AsyncCaller):
 
         if self.cur_item is not None:
             logger.debug(
-                f"rank: {torch.distributed.get_rank()}, item: {self.cur_item}"
+                f"rank: {self.rank}, item: {self.cur_item}"
                 f" is completed, {is_alive}"
             )
 
@@ -381,7 +384,7 @@ class PersistentAsyncCaller(AsyncCaller):
         if is_done:
             # The current request is completed globally. Reset the current item for polling.
             logger.debug(
-                f"rank: {torch.distributed.get_rank()}, item: {self.cur_item}"
+                f"rank: {self.rank}, item: {self.cur_item}"
                 f" is completed globally, {is_done}"
             )
             self.cur_item = None
@@ -439,6 +442,7 @@ class PersistentAsyncCaller(AsyncCaller):
         logger = logging.getLogger(__name__)
         logger.setLevel(log_level)
         logger.info(f"PersistentAsyncCaller: persistent ckpt worker for {rank} has started")
+
         while True:
             item = queue.get()
             if isinstance(item, str) and item == 'DONE':
@@ -487,6 +491,7 @@ class AsyncCallsQueue:
         self.call_idx: int = -1
         self.persistent: bool = persistent
         self.persistent_caller: AsyncCaller = None
+        self._queue_id = id(self)
 
     def _get_async_caller(self):
         if not self.persistent:
@@ -519,7 +524,7 @@ class AsyncCallsQueue:
         self.async_calls.append(_ActiveAsyncRequest(self.call_idx, async_caller, async_request))
         return self.call_idx
 
-    def maybe_finalize_async_calls(self, blocking=False, no_dist=False) -> List[int]:
+    def maybe_finalize_async_calls(self, blocking=False, no_dist=False, cleanup=False) -> List[int]:
         """Finalizes all available calls.
 
         This method must be called on all ranks.
@@ -528,6 +533,10 @@ class AsyncCallsQueue:
             blocking (bool, optional): if True, will wait until all active requests
                 are done. Otherwise, finalizes only the async request that already
                 finished. Defaults to False.
+            no_dist (bool, optional): if True, training ranks simply check its
+                asynchronous checkpoint writer without synchronization.
+            cleanup (bool, optional): if True, will cleanup the async caller.
+                Defaults to False.
         Returns:
             List[int]: list of indices (as returned by `schedule_async_request`)
                 of async calls that have been successfully finalized.
@@ -541,13 +550,24 @@ class AsyncCallsQueue:
                 break
             with debug_time("finalize", logger):
                 call_idx, _, async_request = self.async_calls.popleft()
-                for finalize_fn in async_request.finalize_fns:
-                    finalize_fn()
-                ten = torch.tensor([call_idx], dtype=torch.int, device=torch.cuda.current_device())
-                torch.distributed.all_reduce(ten, op=torch.distributed.ReduceOp.MAX)
-                assert ten.item() == call_idx, 'Unmatched async calls. '
-                'That probably means not all ranks are participating in async finalization'
+                if not cleanup:
+                    # if cleanup is not True, we finalize the async request
+                    # when cleanup is True, we skip finalize_fns because it may include collectives
+                    # that may cause deadlock
+                    for finalize_fn in async_request.finalize_fns:
+                        finalize_fn()
+                if not no_dist:
+                    ten = torch.tensor([call_idx], dtype=torch.int, device=torch.cuda.current_device())
+                    torch.distributed.all_reduce(ten, op=torch.distributed.ReduceOp.MAX)
+                    assert ten.item() == call_idx, 'Unmatched async calls. '
+                    'That probably means not all ranks are participating in async finalization'
                 call_idx_finalized.append(call_idx)
+
+        if blocking and cleanup:
+            # clear the queue of async calls and reset the call_idx
+            self.async_calls.clear()
+            self.call_idx = -1
+
         return call_idx_finalized
 
     def get_num_unfinalized_calls(self):

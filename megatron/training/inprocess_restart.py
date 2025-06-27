@@ -10,17 +10,20 @@ except ImportError:
     inprocess = None
 
 import warnings
+from functools import partial
 
 import torch
 
 from megatron.core import rerun_state_machine
 from megatron.training import get_args
+from megatron.training.async_utils import maybe_finalize_async_save
 
 from . import arguments
 
 
 def destroy_state():
     from . import training
+
     training.destroy_global_state()
     rerun_state_machine.destroy_rerun_state_machine()
 
@@ -64,7 +67,10 @@ def inprocess_restart(train):
         )
 
     finalize = [
-        inprocess.finalize.ThreadedFinalize(timeout=timedelta(seconds=10), fn=destroy_state)
+        inprocess.finalize.ThreadedFinalize(timeout=timedelta(seconds=10), fn=destroy_state),
+        inprocess.finalize.ThreadedFinalize(
+            timeout=timedelta(seconds=10), fn=partial(maybe_finalize_async_save, blocking=True, no_dist=True, cleanup=True)
+        ),
     ]
 
     if args.inprocess_empty_cuda_cache:
@@ -123,7 +129,7 @@ def maybe_wrap_for_inprocess_restart(pretrain):
 
         store = torch.distributed.TCPStore(
             host_name=os.environ['MASTER_ADDR'],
-            port=int(os.environ['MASTER_PORT'])+1,
+            port=int(os.environ['MASTER_PORT']) + 1,
             world_size=int(os.getenv('WORLD_SIZE', '1')),
             is_master=(int(os.getenv('RANK', '0')) == 0),
             timeout=timedelta(seconds=300),

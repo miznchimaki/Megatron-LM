@@ -14,14 +14,15 @@ logger = logging.getLogger(__name__)
 
 # Singleton manager of async calls
 # The default is `TemporalAsyncCaller`
-_async_calls_queue = AsyncCallsQueue()
+_async_calls_queue = None
 
 
 def init_persistent_async_worker():
     global _async_calls_queue
     # Recreate the async_calls_queue for persistent worker
     # This duplicate step is for backward compatiblity
-    _async_calls_queue = AsyncCallsQueue(persistent=True)
+    if _async_calls_queue is None:
+        _async_calls_queue = AsyncCallsQueue(persistent=True)
 
 
 def schedule_async_save(async_request: AsyncRequest):
@@ -30,10 +31,15 @@ def schedule_async_save(async_request: AsyncRequest):
     Args:
         async_request (AsyncRequest): the async save request.
     """
+    global _async_calls_queue
+    if _async_calls_queue is None:
+        # Persistent worker initializes the async_calls_queue already
+        _async_calls_queue = AsyncCallsQueue()
+
     _async_calls_queue.schedule_async_request(async_request)
 
 
-def maybe_finalize_async_save(blocking: bool = False, terminate=False):
+def maybe_finalize_async_save(blocking: bool = False, terminate=False, no_dist=False, cleanup=False):
     """Finalizes active async save calls.
 
     Args:
@@ -43,14 +49,14 @@ def maybe_finalize_async_save(blocking: bool = False, terminate=False):
         terminate (bool, optional): if True, the asynchronous queue will
                 be closed as the last action of this function.
     """
-    args = get_args()
-    if not args.async_save:
+    global _async_calls_queue
+    if _async_calls_queue is None:
         return
 
     if blocking and not is_empty_async_queue():
         print_rank_0('Unfinalized async checkpoint saves. Finalizing them synchronously now.')
 
-    _async_calls_queue.maybe_finalize_async_calls(blocking, no_dist=False)
+    _async_calls_queue.maybe_finalize_async_calls(blocking, no_dist=no_dist, cleanup=cleanup)
 
     if terminate:
         _async_calls_queue.close()

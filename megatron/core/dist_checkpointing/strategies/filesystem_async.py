@@ -232,6 +232,7 @@ class FileSystemWriterAsync(FileSystemWriter):
         logger = logging.getLogger(__name__)
         w_start = time()
         write_results_or_exc: Union[dict, Exception] = dict()
+
         ctx = mp.get_context('fork')
         local_results_queue = ctx.Queue()
         count_queue = ctx.JoinableQueue()
@@ -243,6 +244,7 @@ class FileSystemWriterAsync(FileSystemWriter):
                     ctx.Process(
                         target=partial(FileSystemWriterAsync.write_preloaded_data, transform_list),
                         args=(i, write_bucket, local_results_queue, count_queue, True),
+                        daemon=True,
                     )
                 )
             except Exception as e:
