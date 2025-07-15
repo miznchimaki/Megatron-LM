@@ -22,11 +22,11 @@ fi
 mkdir -p ${SAVE_PATH}
 
 DISTRIBUTED_ARGS=(
-    --nproc_per_node $GPUS_PER_NODE
-    --nnodes $NNODES
-    --node_rank $NODE_RANK
-    --master_addr $MASTER_ADDR
-    --master_port $MASTER_PORT
+    --nproc_per_node ${GPUS_PER_NODE}
+    --nnodes ${NNODES}
+    --node_rank ${NODE_RANK}
+    --master_addr ${MASTER_ADDR}
+    --master_port ${MASTER_PORT}
 )
 
 MODEL_ARGS=(
