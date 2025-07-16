@@ -23,4 +23,9 @@ python ./tools/preprocess_data.py \
     --log-interval ${LOG_INTERVAL} \
     --json-keys ${JSON_KEYS} 2>&1 | tee --append ${LOG_PATH}
 
+mv ./mixtral-pretrain_text_document.bin ${HOME}/datasets/megatron-lm-data/
+mv ./mixtral-pretrain_text_document.idx ${HOME}/datasets/megatron-lm-data/
+mv ${LOG_PATH} ${HOME}/datasets/megatron-lm-data/
+
 echo "end mixtral training data preprocessing at `date '+%Y-%m-%d-%H:%M:%S'`" 2>&1 | tee --append ${LOG_PATH}
+

@@ -14,7 +14,7 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 CHECKPOINT_PATH=${1:-"${HOME}/ckpts/mixtral-mcore-TP2PP4EP8"}
 TOKENIZER_MODEL=${2:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
-DATA_PATH=${3:-"${HOME}/datasets/megatron-lm-data/gpt-2-seq_monkey_text_document"}
+DATA_PATH=${3:-"${HOME}/datasets/megatron-lm-data/mixtral-pretrain_text_document"}
 SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
 if [ -d ${SAVE_PATH} ]; then
     rm --recursive --force ${SAVE_PATH}
