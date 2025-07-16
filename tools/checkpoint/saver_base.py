@@ -171,8 +171,12 @@ class MegatronCheckpointSaverBase:
         # For backward compatibility during local parallel states refactoring
         fake_tp_group = _ConverterFakeProcessGroup(size=self.args.target_tensor_parallel_size)
         fake_ep_group = _ConverterFakeProcessGroup(size=self.args.target_expert_parallel_size)
+        fake_expt_tp_group = _ConverterFakeProcessGroup(size=self.margs.expert_model_parallel_size)
+        fake_tp_ep_group = _ConverterFakeProcessGroup(size=self.margs.expert_model_parallel_size)
         mpu._TENSOR_MODEL_PARALLEL_GROUP = fake_tp_group
         mpu._EXPERT_MODEL_PARALLEL_GROUP = fake_ep_group
+        mpu._EXPERT_TENSOR_PARALLEL_GROUP = fake_expt_tp_group
+        mpu._EXPERT_TENSOR_AND_MODEL_PARALLEL_GROUP = fake_tp_ep_group
         fused_kernels.load(self.margs)
         
         try:

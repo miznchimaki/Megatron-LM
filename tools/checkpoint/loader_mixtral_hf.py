@@ -244,8 +244,12 @@ def _load_checkpoint(queue, args):
     # For backward compatibility during local parallel states refactoring
     fake_tp_group = _ConverterFakeProcessGroup(size=margs.tensor_model_parallel_size)
     fake_ep_group = _ConverterFakeProcessGroup(size=margs.expert_model_parallel_size)
+    fake_expt_tp_group = _ConverterFakeProcessGroup(size=margs.expert_model_parallel_size)
+    fake_tp_ep_group = _ConverterFakeProcessGroup(size=margs.expert_model_parallel_size)
     mpu._TENSOR_MODEL_PARALLEL_GROUP = fake_tp_group
     mpu._EXPERT_MODEL_PARALLEL_GROUP = fake_ep_group
+    mpu._EXPERT_TENSOR_PARALLEL_GROUP = fake_expt_tp_group
+    mpu._EXPERT_TENSOR_AND_MODEL_PARALLEL_GROUP = fake_tp_ep_group
     fused_kernels.load(margs)
 
     # Metadata.
@@ -273,6 +277,7 @@ def _load_checkpoint(queue, args):
     md.consumed_train_samples = 0
     md.consumed_valid_samples = 0
     md.num_experts = margs.num_experts
+    md.qkv_bias = False
 
     # Get first pipe stage.
     mpu.set_tensor_model_parallel_rank(0)
