@@ -1235,6 +1235,9 @@ def setup_model_and_optimizer(
         scale_lr_cond,
         lr_mult,
         use_gloo_process_groups=args.enable_gloo_process_groups,
+        # If the user is asking for a non-zero embedding init std, skip weight decay for embeddings
+        #  to avoid embeddings from shrinking to zero as recommended in https://arxiv.org/abs/2312.16903
+        default_skip_embedding_weight_decay=args.embedding_init_method_std is not None,
     )
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
@@ -1351,10 +1354,12 @@ def setup_model_and_optimizer(
 def dummy_train_step(data_iterator):
     """Single dummy training step."""
     num_microbatches = get_num_microbatches()
-    for _ in range(num_microbatches):
-        # Re-use methods used in get_batch() from pretrain_{gpt, mamba}.py.
-        batch = get_batch_on_this_tp_rank(data_iterator)
-        batch = get_batch_on_this_cp_rank(batch)
+    rerun_state_machine = get_rerun_state_machine()
+    while rerun_state_machine.should_run_forward_backward(data_iterator):
+        for _ in range(num_microbatches):
+            # Re-use methods used in get_batch() from pretrain_{gpt, mamba}.py.
+            batch = get_batch_on_this_tp_rank(data_iterator)
+            batch = get_batch_on_this_cp_rank(batch)
 
 
 def train_step(forward_step_func, data_iterator, model, optimizer, opt_param_scheduler, config):
@@ -2027,7 +2032,6 @@ def checkpoint_and_decide_exit(
                 checkpointing_context,
                 train_data_iterator=train_data_iterator,
             )
-        torch.distributed.barrier()
         print_datetime(f'exiting program at iteration {iteration}')
 
         return True
@@ -2079,7 +2083,8 @@ def train(
     # Make sure rerun_state_machine has the right iteration loaded from checkpoint.
     rerun_state_machine = get_rerun_state_machine()
     if rerun_state_machine.current_iteration != iteration:
-        print_rank_0(f"Setting rerun_state_machine.current_iteration to {iteration}...")
+        print_rank_0(f"Overwriting rerun_state_machine.current_iteration from "
+                     f"{rerun_state_machine.current_iteration} to {iteration}...")
         rerun_state_machine.current_iteration = iteration
 
     # Track E2E metrics at the start of training.
