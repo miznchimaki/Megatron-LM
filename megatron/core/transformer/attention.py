@@ -136,7 +136,7 @@ class Attention(MegatronModule, ABC):
         self.model_comm_pgs = model_comm_pgs
 
         # Per attention head and per partition values
-        world_size = get_pg_size(self.model_comm_pgs.tp)
+        world_size = self.model_comm_pgs.tp.size()
         self.hidden_size_per_attention_head = divide(
             self.query_projection_size, self.config.num_attention_heads
         )
