@@ -10,12 +10,13 @@ MASTER_ADDR=${MASTER_ADDR:-"localhost"}
 MASTER_PORT=${MASTER_PORT:-"6000"}
 NNODES=${SLURM_NNODES:-"1"}
 NODE_RANK=${RANK:-"0"}
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$((${GPUS_PER_NODE}*${NNODES}))
 
-CHECKPOINT_PATH=${1:-"${HOME}/ckpts/mixtral-mcore-TP2PP4EP8"}
+CHECKPOINT_PATH=${1:-"${HOME}/ckpts/Mixtral-8x7B-mcore-TP2PP4EP8"}
 TOKENIZER_MODEL=${2:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
 DATA_PATH=${3:-"${HOME}/datasets/megatron-lm-data/mixtral-pretrain_text_document"}
-SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
+# SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
+SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7Bx2larger"}
 if [ -d ${SAVE_PATH} ]; then
     rm --recursive --force ${SAVE_PATH}
 fi
@@ -32,9 +33,9 @@ DISTRIBUTED_ARGS=(
 MODEL_ARGS=(
     --use-mcore-models
     --disable-bias-linear
-    --seq-length 4096
+    --seq-length 128
     --max-position-embeddings 32768
-    --num-layers 32
+    --num-layers 64  # 2x larger than Mixtral-8x7B (32 layers)
     --hidden-size 4096
     --ffn-hidden-size 14336
     --num-attention-heads 32
@@ -61,6 +62,7 @@ MOE_ARGS=(
     --moe-token-dispatcher-type alltoall
     --overlap-param-gather
     --overlap-grad-reduce
+    --moe-router-pre-softmax
 )
 
 DATA_ARGS=(
@@ -73,7 +75,7 @@ TRAINING_ARGS=(
     --micro-batch-size 1
     --global-batch-size 1
     --lr 1e-4
-    --train-iters 10000
+    --train-iters 100000
     --lr-decay-iters 5000
     --lr-decay-style cosine
     --min-lr 1.0e-5
@@ -81,25 +83,32 @@ TRAINING_ARGS=(
     --lr-warmup-iters 500
     --clip-grad 1.0
     --bf16
+    --main-grads-dtype bf16
+    --main-params-dtype fp16
+    --exp-avg-dtype bf16
+    --exp-avg-sq-dtype bf16
+    --use-precision-aware-optimizer
+    --use-torch-optimizer-for-cpu-offload
+    --use-distributed-optimizer
+    --optimizer-cpu-offload
+    --use-flash-attn
 )
 
+# TODO: Maybe can be optimized further
 MODEL_PARALLEL_ARGS=(
     --tensor-model-parallel-size 2
     --pipeline-model-parallel-size 4
-    --expert-model-parallel-size 8
-    --use-torch-optimizer-for-cpu-offload
-    # --use-distributed-optimizer
-    # --sequence-parallel
+    --expert-model-parallel-size 1
+    --sequence-parallel
 )
 
 LOGGING_ARGS=(
     --log-interval 1 \
-    --save-interval 50 \
+    --save-interval 1000 \
     --eval-interval 100000 \
     --eval-iters 100000 \
     --save ${SAVE_PATH} \
-    --load ${CHECKPOINT_PATH} \
-    --tensorboard-dir "${CHECKPOINT_PATH}/tensorboard" \
+    --tensorboard-dir "${SAVE_PATH}/tensorboard" \
     --no-load-optim \
     --no-load-rng
 )
@@ -118,4 +127,4 @@ torchrun ${DISTRIBUTED_ARGS[@]} ${HOME}/projects/Megatron-LM/pretrain_gpt.py \
     ${DATA_ARGS[@]} \
     ${TRAINING_ARGS[@]} \
     ${MODEL_PARALLEL_ARGS[@]} \
-    ${LOGGING_ARGS[@]}
+    ${LOGGING_ARGS[@]} 2>&1 | tee ${SAVE_PATH}/output.log
