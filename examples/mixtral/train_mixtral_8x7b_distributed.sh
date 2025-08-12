@@ -15,8 +15,8 @@ WORLD_SIZE=$((${GPUS_PER_NODE}*${NNODES}))
 CHECKPOINT_PATH=${1:-"${HOME}/ckpts/Mixtral-8x7B-mcore-TP2PP4EP8"}
 TOKENIZER_MODEL=${2:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
 DATA_PATH=${3:-"${HOME}/datasets/megatron-lm-data/mixtral-pretrain_text_document"}
-# SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
-SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7Bx2larger"}
+SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
+# SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7Bx2larger"}
 if [ -d ${SAVE_PATH} ]; then
     rm --recursive --force ${SAVE_PATH}
 fi
@@ -35,7 +35,7 @@ MODEL_ARGS=(
     --disable-bias-linear
     --seq-length 128
     --max-position-embeddings 32768
-    --num-layers 64  # 2x larger than Mixtral-8x7B (32 layers)
+    --num-layers 32  # 2x larger than Mixtral-8x7B is nearly OK(default 32 layers, 2x is 64 layers)
     --hidden-size 4096
     --ffn-hidden-size 14336
     --num-attention-heads 32
@@ -75,7 +75,7 @@ TRAINING_ARGS=(
     --micro-batch-size 1
     --global-batch-size 1
     --lr 1e-4
-    --train-iters 100000
+    --train-iters 50000
     --lr-decay-iters 5000
     --lr-decay-style cosine
     --min-lr 1.0e-5
@@ -102,12 +102,16 @@ MODEL_PARALLEL_ARGS=(
     --sequence-parallel
 )
 
+SAVE_ARGS=(
+    --save ${SAVE_PATH} \
+    --save-interval 10000 \
+    --no-save-optim
+)
+
 LOGGING_ARGS=(
     --log-interval 1 \
-    --save-interval 1000 \
     --eval-interval 100000 \
     --eval-iters 100000 \
-    --save ${SAVE_PATH} \
     --tensorboard-dir "${SAVE_PATH}/tensorboard" \
     --no-load-optim \
     --no-load-rng
@@ -127,4 +131,5 @@ torchrun ${DISTRIBUTED_ARGS[@]} ${HOME}/projects/Megatron-LM/pretrain_gpt.py \
     ${DATA_ARGS[@]} \
     ${TRAINING_ARGS[@]} \
     ${MODEL_PARALLEL_ARGS[@]} \
+    ${SAVE_ARGS[@]} \
     ${LOGGING_ARGS[@]} 2>&1 | tee ${SAVE_PATH}/output.log
