@@ -30,12 +30,16 @@ DISTRIBUTED_ARGS=(
     --master_port ${MASTER_PORT}
 )
 
+# TODO: parameter num-layers could be 2x, 3x, even 4x larger
+# TODO: native `--num-layers` is 32
+# TODO: When only training one MoE layer, such as the 1st MoE layer, 240 layers is maximum
+# TODO: expanding Mixtral-8x7B to 240 transformer layers leads to 348.56 billion parameters in total
 MODEL_ARGS=(
     --use-mcore-models
     --disable-bias-linear
     --seq-length 128
     --max-position-embeddings 32768
-    --num-layers 32  # 2x larger than Mixtral-8x7B is nearly OK(default 32 layers, 2x is 64 layers)
+    --num-layers 240  # 2x larger than Mixtral-8x7B is nearly OK for full-parameter fine-tuning (default 32 layers, 2x is 64 layers)
     --hidden-size 4096
     --ffn-hidden-size 14336
     --num-attention-heads 32
