@@ -6,17 +6,17 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 GPUS_PER_NODE=8
 # Change for multinode config
-MASTER_ADDR=${MASTER_ADDR:-"localhost"}
-MASTER_PORT=${MASTER_PORT:-"6000"}
-NNODES=${DIST_NNODES:-"1"}
-NODE_RANK=${RANK:-"0"}
+MASTER_ADDR=${1:-"localhost"}
+MASTER_PORT=${2:-"6000"}
+NNODES=${3:-"1"}
+NODE_RANK=${4:-"0"}
 WORLD_SIZE=$((${GPUS_PER_NODE}*${NNODES}))
 
-CHECKPOINT_PATH=${1:-"${HOME}/ckpts/Mixtral-8x7B-mcore-TP2PP4EP8"}
-TOKENIZER_MODEL=${2:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
-DATA_PATH=${3:-"${HOME}/datasets/megatron-lm-data/mixtral-pretrain_text_document"}
-SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
-# SAVE_PATH=${4:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7Bx2larger"}
+CHECKPOINT_PATH=${5:-"${HOME}/ckpts/Mixtral-8x7B-mcore-TP2PP4EP8"}
+TOKENIZER_MODEL=${6:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
+DATA_PATH=${7:-"${HOME}/datasets/megatron-lm-data/mixtral-pretrain_text_document"}
+SAVE_PATH=${8:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7B"}
+# SAVE_PATH=${8:-"${HOME}/outputs/Megatron-LM-Mixtral-8x7Bx2larger"}
 if [ -d ${SAVE_PATH} ]; then
     rm --recursive --force ${SAVE_PATH}
 fi
@@ -33,12 +33,14 @@ DISTRIBUTED_ARGS=(
 # TODO: native `--num-layers` is 32
 # TODO: For 1 H20 node, when only training one MoE layer (such as the 1st MoE layer), 240 layers is maximum
 # TODO: 240 transformer layers = 348.56 billion parameters
+# TODO: 480 transformer layers = 696.86 billion parameters
+# TODO: 720 transformer layers = 1045.16 billion parameters
 MODEL_ARGS=(
     --use-mcore-models
     --disable-bias-linear
     --seq-length 128
     --max-position-embeddings 32768
-    --num-layers 480
+    --num-layers 720
     --hidden-size 4096
     --ffn-hidden-size 14336
     --num-attention-heads 32
@@ -99,15 +101,15 @@ TRAINING_ARGS=(
 
 # TODO: Maybe can be optimized further
 MODEL_PARALLEL_ARGS=(
-    --tensor-model-parallel-size 2
-    --pipeline-model-parallel-size 4
-    --expert-model-parallel-size 2
+    --tensor-model-parallel-size 4
+    --pipeline-model-parallel-size 6
+    --expert-model-parallel-size 1
     --sequence-parallel
 )
 
 SAVE_ARGS=(
     --save ${SAVE_PATH} \
-    --save-interval 100 \
+    --save-interval 20000 \
     --no-save-optim
 )
 
