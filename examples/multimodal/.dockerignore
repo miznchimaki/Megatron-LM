@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!bazel-dist/
+!bazel-dist/**
+!*.whl
+!CLIP/
+!CLIP/**
