@@ -2,33 +2,54 @@
 # Pretrain a multimodal model.
 
 
+echo start megatron-lm MLLM training at `date +%Y-%m-%d-%H:%M:%S`
 export NCCL_IB_SL=1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-PROJECT_DIR=${1:-"${HOME}/projects/Megatron-LM"}
-MODEL_NAME=${2:-"mcore-llava-mistral-7b-instruct-clip336-pretraining"}
-OUTPUT_DIR=${3:-"${HOME}/outputs/${MODEL_NAME}"}
-LOG_PATH=${4:-"${OUTPUT_DIR}/output.log"}
-TENSORBOARD_DIR=${5:-"${OUTPUT_DIR}/tensorboard"}
-PRETRAIN_CKPT_FOLDER=${6:-""}
+# distributed params
+NPROC_PER_NODE=${1:-"8"}
+NNODES=${2:-"1"}
+MASTER_ADDR=${3:-"gpu-node9"}
+MASTER_PORT=${4:-"23479"}
+NODE_RANK=${5:-"0"}
+
+TORCH_DIST_ARGS=(
+    --nproce-per-node ${NPROC_PER_NODE}
+    --nnodes ${NNODES}
+    --master-addr ${MASTER_ADDR}
+    --master-port ${MASTER_PORT}
+    --node-rank ${NODE_RANK}
+)
+
+PROJECT_DIR=${6:-"${HOME}/projects/Megatron-LM"}
+MODEL_NAME=${7:-"mcore-llava-mistral-7b-instruct-clip336-pretraining"}
+OUTPUT_DIR=${8:-"${HOME}/outputs/${MODEL_NAME}"}
+if [ -d ${OUTPUT_DIR} ]; then
+    rm -rf ${OUTPUT_DIR}
+fi
+mkdir ${OUTPUT_DIR}
+
+LOG_PATH=${9:-"${OUTPUT_DIR}/output.log"}
+TENSORBOARD_DIR=${10:-"${OUTPUT_DIR}/tensorboard"}
+PRETRAIN_CKPT_FOLDER=${11:-""}
 if [[ -z ${PRETRAIN_CKPT_FOLDER} ]]; then
     PRETRAIN_CKPT_DIR=""
 else
     PRETRAIN_CKPT_DIR=${HOME}/ckpts/${PRETRAIN_CKPT_FOLDER}
 fi
 
-DATA_CONFIG_PATH=${7:-"${PROJECT_DIR}/examples/multimodal/pretrain_dataset.yaml"}
+DATA_CONFIG_PATH=${12:-"${PROJECT_DIR}/examples/multimodal/pretrain_dataset.yaml"}
 
 export TRITON_CACHE_DIR="${HOME}/triton-cache/"
 # The following patch to the Triton cache manager is needed for Triton version <= 3.1
 export TRITON_CACHE_MANAGER="megatron.core.ssm.triton_cache_manager:ParallelFileCacheManager"
 
-GLOBAL_BATCH_SIZE=${8:-"1"}
-NUM_WORKERS=${9:-"2"}
-HIDDEN_DROPOUT=${10:-"0.0"}
-LOG_INTERVAL=${11:-"1"}
-NONDETERMINISTIC_ATTN=${12:-"1"}
-TOKENIZER_MODEL=${13:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
+GLOBAL_BATCH_SIZE=${13:-"1"}
+NUM_WORKERS=${14:-"2"}
+HIDDEN_DROPOUT=${15:-"0.0"}
+LOG_INTERVAL=${16:-"1"}
+NONDETERMINISTIC_ATTN=${17:-"1"}
+TOKENIZER_MODEL=${18:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
 
 
 NETWORK_SIZE_ARGS=(
@@ -62,8 +83,8 @@ CHECKPOINTING_ARGS=(
     --ckpt-format torch_dist
 )
 
-# TODO: Need modifications
-DISTRIBUTED_ARGS=(
+# TODO: maybe need modifications
+MEGATRON_DIST_ARGS=(
     --use-distributed-optimizer
     --tensor-model-parallel-size 4
     --pipeline-model-parallel-size 1
@@ -150,5 +171,21 @@ LOGGING_ARGS=(
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NONDETERMINISTIC_ATTN}
 
-# TODO: Now here
-torchrun --nproc_per_node 8 examples/multimodal/train.py ${OPTIONS}
+cd ${PROJECT_DIR}/example/multimodal/
+torchrun ${TORCH_DIST_ARGS[@]} ./train.py ${NETWORK_SIZE_ARGS[@]} \
+    ${MIXED_PRECISION_ARGS[@]} \
+    ${CHECKPOINTING_ARGS[@]} \
+    ${MEGATRON_DIST_ARGS[@]} \
+    ${TRANSFORMER_ENGINE_ARGS[@]} \
+    ${MULTIMODAL_EXTRA_ARGS[@]} \
+    ${VISION_ARGS[@]} \
+    ${TRAINING_ARGS[@]} \
+    ${DATA_ARGS[@]} \
+    ${REGULARIZATION_ARGS[@]} \
+    ${LEARNING_RATE_ARGS[@]} \
+    ${VALIDATION_ARGS[@]} \
+    ${TOKENIZER_ARGS[@]} \
+    ${INITIALIZATION_ARGS[@]} \
+    ${LOGGING_ARGS[@]} 2>&1 | tee ${LOG_PATH}
+
+echo end megatron-lm MLLM training at `date +%Y-%m-%d-%H:%M:%S`
