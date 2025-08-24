@@ -50,6 +50,7 @@ HIDDEN_DROPOUT=${15:-"0.0"}
 LOG_INTERVAL=${16:-"1"}
 NONDETERMINISTIC_ATTN=${17:-"1"}
 TOKENIZER_MODEL=${18:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1/tokenizer.model"}
+WANDB_API_KEY=${19:-""}
 
 
 NETWORK_SIZE_ARGS=(
@@ -81,9 +82,12 @@ CHECKPOINTING_ARGS=(
     --dataloader-save ${OUTPUT_DIR}/dataloader
     --pretrained-checkpoint ${PRETRAIN_CKPT_DIR}
     --ckpt-format torch_dist
+    --no-load-optim
+    --no-load-rng
 )
+# --no-save-optim
 
-# TODO: maybe need modifications
+# TODO: maybe need modifications fro MoE-LLM
 MEGATRON_DIST_ARGS=(
     --use-distributed-optimizer
     --tensor-model-parallel-size 4
@@ -122,6 +126,17 @@ TRAINING_ARGS=(
     --log-interval ${LOG_INTERVAL}
     --dataloader-type external
     --tensorboard-dir ${TENSORBOARD_DIR}
+    --use-torch-optimizer-for-cpu-offload
+    --optimizer-cpu-offload
+    --sequence-parallel
+)
+
+EXPERIMENTAL_ARGS=(
+    --main-grads-dtype bf16
+    --main-params-dtype fp16
+    --exp-avg-dtype bf16
+    --exp-avg-sq-dtype bf16
+    --use-precision-aware-optimizer
 )
 
 DATA_ARGS=(
@@ -167,6 +182,12 @@ INITIALIZATION_ARGS=(
 LOGGING_ARGS=(
     --log-params-norm
 )
+if [ -n "${WANDB_API_KEY}" ]; then
+    LOGGING_ARGS+=(
+        --wandb-project ${WANDB_PROJECT:-"Megatron-LM-1T-VLM"}
+        --wandb-exp-name ${WANDB_NAME:-"VLM-1node-pretrain"}
+    )
+fi
 
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NONDETERMINISTIC_ATTN}
