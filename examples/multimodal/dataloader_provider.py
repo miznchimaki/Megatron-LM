@@ -24,7 +24,8 @@ from megatron.training import get_args
 from megatron.training.checkpointing import get_checkpoint_name
 
 
-def datasets_provider(task_encoder,worker_config=None):
+# TODO: My Debug for splitting the task encoders between train and evaluation
+def datasets_provider(train_task_encoder, valid_task_encoder, worker_config=None):
     """Create multimodal train, validation and test datasets."""
     args = get_args()
 
@@ -32,7 +33,7 @@ def datasets_provider(task_encoder,worker_config=None):
     train_dataset = get_train_dataset(
         dname,
         batch_size=args.micro_batch_size,
-        task_encoder=task_encoder,
+        task_encoder=train_task_encoder,  # TODO: My Debug
         virtual_epoch_length=1000,
         max_samples_per_sequence=100,
         shuffle_buffer_size=100,
@@ -47,7 +48,7 @@ def datasets_provider(task_encoder,worker_config=None):
         batch_size=args.micro_batch_size,
         # This is the total number over all workers
         # limit=args.eval_iters * get_num_microbatches(),
-        task_encoder=task_encoder,
+        task_encoder=valid_task_encoder,  # TODO: My Debug
         worker_config=worker_config,
         packing_buffer_size=args.packing_buffer_size,
         handler=print_error_handler,
@@ -98,12 +99,18 @@ def is_dataloader_rank(encoder_pipeline_model_parallel_size):
     return is_first_rank
 
 
-def train_valid_test_dataloaders_provider(train_val_test_num_samples, task_encoder=None):
+# TODO: My Debug for splitting the task encoders between train and evaluation
+def train_valid_test_dataloaders_provider(train_val_test_num_samples, train_task_encoder=None, valid_task_encoder=None):
     """Build multimodal train, validation and test dataloaders."""
     args = get_args()
-    
-    if task_encoder is None:
-        task_encoder = TaskEncoder()
+
+    # TODO: My Debug
+    # if task_encoder is None:
+    #     task_encoder = TaskEncoder()
+    if train_task_encoder is None:
+        train_task_encoder = TaskEncoder()
+    if valid_task_encoder is None:
+        valid_task_encoder = TaskEncoder()
 
     # Dataloader is only on specific ranks.
     if not is_dataloader_rank(args.encoder_pipeline_model_parallel_size):
@@ -124,7 +131,8 @@ def train_valid_test_dataloaders_provider(train_val_test_num_samples, task_encod
         worker_debug_path=worker_debug_path,
         worker_log_level=worker_log_level,
     )
-    train_ds, valid_ds1, test_ds = datasets_provider(task_encoder, worker_config)
+    # TODO: My Debug
+    train_ds, valid_ds1, test_ds = datasets_provider(train_task_encoder, valid_task_encoder, worker_config)
 
     train_dataloader = get_savable_loader(train_ds, worker_config=worker_config)
     if args.load is not None:
