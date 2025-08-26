@@ -76,14 +76,14 @@ MIXED_PRECISION_ARGS=(
 )
 
 CHECKPOINTING_ARGS=(
-    --save-interval 5000
+    --save-interval 10000
     --save ${OUTPUT_DIR}
     --dataloader-save ${OUTPUT_DIR}/dataloader
     --ckpt-format torch_dist
     --no-load-optim
     --no-load-rng
+    --no-save-optim
 )
-# --no-save-optim
 if [ -n "${PRETRAIN_CKPT_DIR}" ]; then
     CHECKPOINTING_ARGS+=(
         --pretrained-checkpoint ${PRETRAIN_CKPT_DIR}
@@ -130,8 +130,8 @@ TRAINING_ARGS=(
     --dataloader-type external
     --tensorboard-dir ${TENSORBOARD_DIR}
     --use-torch-optimizer-for-cpu-offload
-    --sequence-parallel
 )
+# --sequence-parallel
 
 EXPERIMENTAL_ARGS=(
     --main-grads-dtype bf16
@@ -168,8 +168,8 @@ LEARNING_RATE_ARGS=(
 )
 
 VALIDATION_ARGS=(
-    --eval-iters 50000
-    --eval-interval 50000
+    --eval-iters 200000
+    --eval-interval 200000
 )
 
 TOKENIZER_ARGS=(
