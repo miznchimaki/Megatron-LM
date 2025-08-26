@@ -53,6 +53,9 @@ TOKENIZER_MODEL=${18:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1"}
 WANDB_API_KEY=${19:-""}
 
 
+# TODO: num-layers: 32 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B; (2) 7.24B
+# TODO: num-layers: 256 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 256); (2) 56.10B
+# TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 504); (2) 110.20B
 NETWORK_SIZE_ARGS=(
     --apply-layernorm-1p
     --normalization RMSNorm
@@ -63,7 +66,7 @@ NETWORK_SIZE_ARGS=(
     --rotary-percent 1.0
     --rotary-base 1000000
     --swiglu
-    --num-layers 32
+    --num-layers 504
     --hidden-size 4096
     --num-attention-heads 32
     --max-position-embeddings 4096
@@ -76,7 +79,7 @@ MIXED_PRECISION_ARGS=(
 )
 
 CHECKPOINTING_ARGS=(
-    --save-interval 10000
+    --save-interval 20000
     --save ${OUTPUT_DIR}
     --dataloader-save ${OUTPUT_DIR}/dataloader
     --ckpt-format torch_dist
