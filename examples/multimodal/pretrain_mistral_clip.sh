@@ -22,7 +22,7 @@ TORCH_DIST_ARGS=(
 )
 
 PROJECT_DIR=${6:-"${HOME}/projects/Megatron-LM"}
-MODEL_NAME=${7:-"one-H20-node-731.69b-llave-504-layers-mixtral-and-clip-vit"}
+MODEL_NAME=${7:-"one-H20-node-731.69b-llava-504-layers-mixtral-and-clip-vit"}
 OUTPUT_DIR=${8:-"${HOME}/outputs/${MODEL_NAME}"}
 if [ -d ${OUTPUT_DIR} ]; then
     rm -rf ${OUTPUT_DIR}
