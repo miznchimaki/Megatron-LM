@@ -22,7 +22,7 @@ TORCH_DIST_ARGS=(
 )
 
 PROJECT_DIR=${6:-"${HOME}/projects/Megatron-LM"}
-MODEL_NAME=${7:-"one-H20-node-110.20b-llave-504-layers-mistral-and-clip-vit"}
+MODEL_NAME=${7:-"one-H20-node-731.69b-llave-504-layers-mixtral-and-clip-vit"}
 OUTPUT_DIR=${8:-"${HOME}/outputs/${MODEL_NAME}"}
 if [ -d ${OUTPUT_DIR} ]; then
     rm -rf ${OUTPUT_DIR}
@@ -56,6 +56,9 @@ WANDB_API_KEY=${19:-""}
 # TODO: num-layers: 32 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B; (2) 7.24B
 # TODO: num-layers: 256 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 256); (2) 56.10B
 # TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 504); (2) 110.20B
+
+# TODO: num-layers: 32 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 46.70B
+# TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 731.69B
 NETWORK_SIZE_ARGS=(
     --apply-layernorm-1p
     --normalization RMSNorm
@@ -112,7 +115,7 @@ MEGATRON_DIST_ARGS=(
     --pipeline-model-parallel-size 2
     --distributed-timeout-minutes 120
     --overlap-param-gather
-    --overlap-grad-reduct
+    --overlap-grad-reduce
 )
 
 TRANSFORMER_ENGINE_ARGS=(
@@ -216,6 +219,7 @@ export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NONDETERMINISTIC_ATTN}
 # export TORCHDYNAMO_DISABLE=1
 cd ${PROJECT_DIR}/examples/multimodal/
 torchrun ${TORCH_DIST_ARGS[@]} ./train.py ${NETWORK_SIZE_ARGS[@]} \
+    ${MOE_ARGS[@]} \
     ${MIXED_PRECISION_ARGS[@]} \
     ${CHECKPOINTING_ARGS[@]} \
     ${MEGATRON_DIST_ARGS[@]} \

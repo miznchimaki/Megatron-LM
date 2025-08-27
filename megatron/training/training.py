@@ -1042,12 +1042,12 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
     for model_module in model:
         for param in model_module.parameters():
             tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
-        # TODO: Debug!
-        for name, param in model_module.named_parameters():
-            if "decoder.layers.0.mlp" in name:
-                param.requires_grad_(True)
-            else:
-                param.requires_grad_(False)
+        # TODO: My Debug for training only one MoE layer
+        # for name, param in model_module.named_parameters():
+        #     if "decoder.layers.0.mlp" in name:
+        #         param.requires_grad_(True)
+        #     else:
+        #         param.requires_grad_(False)
 
     # Print number of parameters.
     num_parameters = sum(
