@@ -71,6 +71,18 @@ NETWORK_SIZE_ARGS=(
     --num-attention-heads 32
     --max-position-embeddings 4096
     --ffn-hidden-size 14336
+    --no-position-embedding
+)
+
+MOE_ARGS=(
+    --num-experts 8
+    --moe-router-topk 1
+    --moe-router-load-balancing-type aux_loss
+    --moe-aux-loss-coeff 1e-2
+    --moe-grouped-gemm
+    --moe-token-dispatcher-type alltoall
+    --moe-router-pre-softmax
+    --expert-model-parallel-size 1
 )
 
 MIXED_PRECISION_ARGS=(
@@ -99,6 +111,8 @@ MEGATRON_DIST_ARGS=(
     --tensor-model-parallel-size 4
     --pipeline-model-parallel-size 2
     --distributed-timeout-minutes 120
+    --overlap-param-gather
+    --overlap-grad-reduct
 )
 
 TRANSFORMER_ENGINE_ARGS=(
@@ -123,6 +137,7 @@ VISION_ARGS=(
 )
 
 TRAINING_ARGS=(
+    --use-mcore-models
     --no-masked-softmax-fusion
     --use-flash-attn
     --disable-bias-linear
