@@ -97,6 +97,7 @@ TRAINING_ARGS=(
     --use-distributed-optimizer
     --optimizer-cpu-offload
     --use-flash-attn
+    --distributed-timeout-minutes 120
 )
 
 # TODO: Maybe can be optimized further
@@ -109,7 +110,7 @@ MODEL_PARALLEL_ARGS=(
 
 SAVE_ARGS=(
     --save ${SAVE_PATH} \
-    --save-interval 20000 \
+    --save-interval 40000 \
     --no-save-optim
 )
 
