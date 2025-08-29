@@ -22,7 +22,7 @@ TORCH_DIST_ARGS=(
 )
 
 PROJECT_DIR=${6:-"${HOME}/projects/Megatron-LM"}
-MODEL_NAME=${7:-"one-H20-node-731.69b-llava-504-layers-mixtral-and-clip-vit"}
+MODEL_NAME=${7:-"two-H20-nodes-1463.12b-llava-1008-layers-mixtral-and-clip-vit"}
 OUTPUT_DIR=${8:-"${HOME}/outputs/${MODEL_NAME}"}
 if [ -d ${OUTPUT_DIR} ]; then
     rm -rf ${OUTPUT_DIR}
@@ -53,12 +53,9 @@ TOKENIZER_MODEL=${18:-"${HOME}/ckpts/Mixtral-8x7B-Instruct-v0.1"}
 WANDB_API_KEY=${19:-""}
 
 
-# TODO: num-layers: 32 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B; (2) 7.24B
-# TODO: num-layers: 256 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 256); (2) 56.10B
-# TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mistral-7B (extend attention layers from 32 to 504); (2) 110.20B
-
 # TODO: num-layers: 32 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 46.70B
-# TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 731.69B
+# TODO: num-layers: 504 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 731.69B -- This is the maximum capacity for one node
+# TODO: num-layers: 1008 -> (1) LLaVA based on CLIP-ViT/14@336px and Mixtral; (2) 1463.12B -- This is the maximum capacity for two nodes
 NETWORK_SIZE_ARGS=(
     --apply-layernorm-1p
     --normalization RMSNorm
@@ -69,7 +66,7 @@ NETWORK_SIZE_ARGS=(
     --rotary-percent 1.0
     --rotary-base 1000000
     --swiglu
-    --num-layers 504
+    --num-layers 1008
     --hidden-size 4096
     --num-attention-heads 32
     --max-position-embeddings 4096
@@ -112,7 +109,7 @@ fi
 MEGATRON_DIST_ARGS=(
     --use-distributed-optimizer
     --tensor-model-parallel-size 4
-    --pipeline-model-parallel-size 2
+    --pipeline-model-parallel-size 4
     --distributed-timeout-minutes 120
     --overlap-param-gather
     --overlap-grad-reduce
